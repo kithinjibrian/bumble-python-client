@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message user_transit_proto
+{
+	string username = 1;
+	string password = 2;
+};
