@@ -5,3 +5,6 @@ __pycache__/
 
 lib/
 bin/
+keys/public_key.bin
+config.sraso
+token

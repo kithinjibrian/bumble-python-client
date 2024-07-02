@@ -2,11 +2,8 @@ import time
 import json
 import socket
 import pysodium
-from db_objects.dbo import (
-    Compose
-)
 from sraso import load
-from proto_py import bee_pb2, user_pb2, bumble_pb2
+from proto_py import bee_pb2, bumble_pb2
 
 
 def serialize_request(action, is_enc, nonce, body):
@@ -43,8 +40,9 @@ def unserialize_reply(rep,shared_key):
     return r
 
 class Request:
-    def __init__(self, action, body, token = b""):
-        self.action = action
+    def __init__(self, uae, body, token = b""):
+        self.action = uae['action']
+        self.server_address = (uae['host'], uae['port'])
         self.body = body
         self.token = token
         self.server_public_key = b""
@@ -55,19 +53,24 @@ class Request:
         
     def send(self):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = ("localhost", 1805)
         
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server_address = ("localhost", 1805)
             
-            client_socket.connect(server_address)
-            print("Connected to server:", server_address)
+            client_socket.connect(self.server_address)
+            print("Connected to server:", self.server_address)
             
-            client_socket.sendall(serialize_request("get-spk", False, b"", b""))
-            res_spk = unserialize_response(client_socket.recv(1024))
-            self.server_public_key = res_spk.body
-            
+            try:
+                with open("keys/public_key.bin", 'rb') as file:
+                    self.server_public_key = file.read()
+            except FileNotFoundError:
+                client_socket.sendall(serialize_request("get-spk", False, b"", b""))
+                res_spk = unserialize_response(client_socket.recv(1024))
+                self.server_public_key = res_spk.body
+                
+                with open("keys/public_key.bin", 'wb') as file:
+                    file.write(self.server_public_key)
+                    
             client_socket.sendall(serialize_request("get-dpk", False, b"", b""))
             self.server_diffie = unserialize_response(client_socket.recv(1024))
             
@@ -89,29 +92,3 @@ class Request:
                 print("error verifying public key")            
         finally:
             client_socket.close()
-            
-            
-def pack_user():
-    user = user_pb2.user_transit_proto()
-    user.username = "bumbledb"
-    user.password = "optimus-prime"
-    return user.SerializeToString()
-  
-reg = Request("user-register", pack_user()).send()          
-log = Request("user-login", pack_user()).send()
-
-my_dict = {
-    "name": "John Doe",
-    "age": 30,
-    "city": "New York"
-}
-
-obj = Compose("dict", my_dict)
-print(obj)
-
-prot = Request("cache-save", str(obj).encode("utf-8"), log.body).send()
-print(prot)
-
-prot = Request("cache-get", b"dict", log.body).send()
-print(prot.body.decode("utf-8"))
-print(load.load(prot.body.decode("utf-8")))
